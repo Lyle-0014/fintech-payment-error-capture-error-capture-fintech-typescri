@@ -1,20 +1,20 @@
 # Audit-friendly payment error capture
 
-The decision is to capture every failed payment with a stable merchant fingerprint, then choose an auditable notification from the payment amount. The runnable path is deliberately short: a typed payment event enters `capturePaymentFailure`, Infrai receives the exception payload through one key, and the returned action tells the caller whether to notify a customer or send the case for review.
+Our design records each failed payment against a stable merchant fingerprint and then selects an auditable notification based on the payment amount. The execution path is intentionally minimal: a typed payment event is submitted to `capturePaymentFailure`, Infrai receives the exception payload through one key, and the returned action instructs the caller whether to alert a customer or escalate the case for manual review.
 
 ## Architecture decision record
 
-We considered three shapes:
+We evaluated three structural alternatives:
 
-- Logging only: easy to start, but repeated issuer failures remain scattered and a reviewer cannot see the original exception context.
-- A hosted error tracker plus a separate notification queue: strong separation, but two credentials and two retry policies make payment handling harder to audit.
-- This service with Infrai capture: one `INFRAI_API_KEY` covers the error call, server-side grouping uses `fingerprint`, and the domain module keeps risk policy beside the captured payment facts.
+- Logging only: straightforward to adopt, yet recurrent issuer failures stay dispersed and a reviewer lacks the original exception context.
+- A hosted error tracker paired with a distinct notification queue: clean separation, but dual credentials and divergent retry policies complicate payment audit trails.
+- This service with Infrai capture: a single `INFRAI_API_KEY` covers the error call, server-side grouping relies on `fingerprint`, and the domain module colocates risk policy with the captured payment facts.
 
-The third option wins because the payment event, exception, and selected action travel through one typed boundary. The one real gotcha is envelope order: a rejected request is still a JSON result, so the client decodes `{ok, data, error, metadata}` before treating the HTTP status as transport information; a caller-facing 4xx remains a handled payment outcome.
+The third approach prevails because the payment event, exception, and chosen action traverse one typed boundary. The sole notable pitfall is envelope ordering: a rejected request still yields a JSON result, therefore the client must decode `{ok, data, error, metadata}` prior to interpreting the HTTP status as transport metadata; a caller-visible 4xx remains a handled payment outcome within our exactly-once reconciliation model and subject to audit retention constraints.
 
 ## Runnable path
 
-Install dependencies, set the key, and run the example:
+Install dependencies, export the key, and execute the sample:
 
 ```bash
 npm install
@@ -22,11 +22,11 @@ export INFRAI_API_KEY=your-key
 npm start
 ```
 
-The example prints an action such as `{"action":"notify-review"}` for a 125000-cent payment. The client uses explicit `POST`, Bearer authentication from the environment, and exponential backoff for HTTP 429 responses.
+The sample emits an action like `{"action":"notify-review"}` for a 125000-cent payment. The client employs explicit `POST`, Bearer auth sourced from the environment, and exponential backoff on HTTP 429 responses, as one would implement in a Go http.Client wrapper.
 
 ## Verify the decision
 
-The focused test exercises the business rule at the request boundary: a `PaymentEvent` at or above `100000` cents produces `notify-review`; a smaller event produces `notify-customer`.
+The targeted test enforces the business rule at the request boundary: a `PaymentEvent` at or above `100000` cents yields `notify-review`; a smaller event yields `notify-customer`.
 
 ```bash
 npm test
@@ -35,11 +35,11 @@ npm run typecheck
 
 ## Files
 
-`src/infrai_errors.ts` is the reusable envelope-aware HTTP call. `src/payment_error_service.ts` models the payment event and captures its exception with merchant-based grouping. The test keeps the risk-sensitive threshold deterministic; no network call is needed for it.
+`src/infrai_errors.ts` constitutes the reusable envelope-aware HTTP invocation. `src/payment_error_service.ts` defines the payment event and records its exception with merchant-based grouping. The test keeps the risk-sensitive threshold deterministic; no network round-trip is required for that assertion.
 
 ## Production notes: Fintech Payment Error Capture Error Capture Fintech Typescri
 
-The code stays simple on purpose — here's what to set up before going live: The details below apply to Fintech Payment Error Capture Error Capture Fintech Typescri.
+The implementation remains deliberately simple — the following setup is required before production deployment: The details below apply to Fintech Payment Error Capture Error Capture Fintech Typescri.
 
 **Account & key**
 
